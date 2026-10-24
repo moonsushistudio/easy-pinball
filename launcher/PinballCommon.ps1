@@ -453,22 +453,39 @@ function Import-Downloads([string[]]$Folders = @((Join-Path $env:USERPROFILE 'Do
 }
 
 # --- Music volume -------------------------------------------------------------
-# PinMAME's "volume" is an attenuation in dB per ROM (0 = its maximum, -32 = quietest);
-# shown as a percentage. Going above 0 dB is possible but clips, so 100% is the top.
+# PinMAME's "volume" is an attenuation in whole dB per ROM (0 = its normal maximum,
+# -32 = quietest), shown as a percentage. Since PinMAME 3.x it can go above 0 dB as a boost
+# (it warns that this may crackle), which is the only way to make music and voices louder
+# than the effects on VPX 10.8.0; 200% (+6 dB) is the top.
 function Get-MusicVolume {
     $db = (Get-ItemProperty "$PinMameKey\default" -ErrorAction SilentlyContinue).volume
     if ($null -eq $db) { return 100 }
     $db = [int64]$db
     if ($db -gt [int]::MaxValue) { $db -= 4294967296 }   # a negative DWORD reads back unsigned
     if ($db -le -32) { return 0 }
-    [int][Math]::Round(100 * [Math]::Pow(10, [Math]::Min(0, $db) / 20))
+    [int][Math]::Round(100 * [Math]::Pow(10, [Math]::Min(6, $db) / 20))
 }
 
 function Set-MusicVolume([int]$Percent) {
-    $db = if ($Percent -le 0) { -32 } else { [Math]::Max(-32, [int][Math]::Round(20 * [Math]::Log10($Percent / 100))) }
+    $db = if ($Percent -le 0) { -32 } else { [Math]::Max(-32, [Math]::Min(6, [int][Math]::Round(20 * [Math]::Log10($Percent / 100)))) }
     # Per-ROM keys are copied from 'default' the first time a ROM runs, so set every one.
     Get-ChildItem $PinMameKey | Where-Object PSChildName -ne 'globals' | ForEach-Object { Set-ItemProperty $_.PSPath volume $db -Type DWord }
-    Set-IniValues $VpxIni 'Player' @{ MusicVolume = $Percent }   # music that tables without a ROM play themselves
+    # Music that tables without a ROM play themselves; VPX caps it at 100.
+    Set-IniValues $VpxIni 'Player' @{ MusicVolume = [Math]::Min(100, $Percent) }
+}
+
+# --- Effects volume -----------------------------------------------------------
+# VPX turns [Player] SoundVolume (0-100) into loudness with its legacy curve of 10 dB per
+# tenfold step: 50 is only -3 dB, 5 is -13 dB and 1 (-20 dB) is the quietest before 0 = off.
+# The Settings slider uses the same hearing scale as music (50% = -6 dB), so the value
+# VPX gets is percent^2 / 100: 50% -> 25, 10% -> 1.
+function ConvertTo-VpxVolume([int]$Percent) {
+    if ($Percent -le 0) { return 0 }
+    [Math]::Max(1, [int][Math]::Round($Percent * $Percent / 100))
+}
+
+function ConvertFrom-VpxVolume([double]$Value) {
+    [int][Math]::Round(10 * [Math]::Sqrt([Math]::Max(0, [Math]::Min(100, $Value))))
 }
 
 # --- INI editing that keeps VPX's comments and layout intact ---------------
