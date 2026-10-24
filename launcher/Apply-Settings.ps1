@@ -6,8 +6,9 @@ param(
     [double]$FOV = 40,
     [double]$Layback = 0,
     [double]$DayNight = 0.8,    # room light on the table for every table: 0.1 = night ... 0.9 = daylight; tables default near 0.5
-    # Table sound effects (flippers, ball, bumpers) in percent. PinMAME's music and speech
-    # are already at its 0 dB maximum, so effects are turned down to balance them.
+    # Table sound effects (flippers, ball, bumpers) in percent on a hearing scale, like the
+    # Settings slider (50% = half as loud, 10% = VPX's quietest, 0 = off). PinMAME's music
+    # and speech are already at its 0 dB maximum, so effects are turned down to balance them.
     [ValidateRange(0, 100)][int]$EffectsVolume = 50,
     # Where the backglass goes: Auto = the second screen if there is one, else beside the table.
     [ValidateSet('Auto', 'Beside', 'Second')][string]$Backglass = 'Auto'
@@ -25,7 +26,7 @@ $saved = @{
 foreach ($name in $saved.Keys) {
     $n = 0.0
     if (-not $PSBoundParameters.ContainsKey($name) -and [double]::TryParse($saved[$name], [Globalization.NumberStyles]::Float, $inv, [ref]$n)) {
-        Set-Variable $name $(if ($name -eq 'EffectsVolume') { [int]$n } else { $n })
+        Set-Variable $name $(if ($name -eq 'EffectsVolume') { ConvertFrom-VpxVolume $n } else { $n })
     }
 }
 
@@ -56,7 +57,7 @@ Set-IniValues $VpxIni 'Player' @{
     Height              = $H
     PlaySound           = 1
     PlayMusic           = 1
-    SoundVolume         = $EffectsVolume
+    SoundVolume         = ConvertTo-VpxVolume $EffectsVolume
     # Mouse: left button = left flipper, right button = right flipper, middle button = plunger.
     EnableMouseInPlayer = 1
     JoyLFlipKey         = 25

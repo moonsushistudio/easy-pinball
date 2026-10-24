@@ -247,19 +247,21 @@ Add-Type -AssemblyName PresentationFramework, PresentationCore, WindowsBase, Sys
             <TextBlock x:Name="EffectsValue" DockPanel.Dock="Right" FontFamily="Bahnschrift" FontWeight="SemiBold" FontSize="17" Foreground="{StaticResource Gold}"/>
             <TextBlock Text="Sound effects" FontFamily="Bahnschrift" FontWeight="SemiBold" FontSize="17"/>
           </DockPanel>
-          <Slider x:Name="Effects" Minimum="0" Maximum="100" SmallChange="5" LargeChange="10" TickFrequency="5" IsSnapToTickEnabled="True" Margin="0,10,0,2"/>
+          <Slider x:Name="Effects" Minimum="0" Maximum="100" SmallChange="10" LargeChange="10" TickFrequency="10" IsSnapToTickEnabled="True" Margin="0,10,0,2"/>
           <DockPanel Margin="0,0,0,26">
-            <TextBlock DockPanel.Dock="Right" Text="Full" Foreground="#8A93A6" FontSize="12"/>
-            <TextBlock Text="Flippers, ball, bumpers" Foreground="#8A93A6" FontSize="12"/>
+            <TextBlock x:Name="EffectsHigh" DockPanel.Dock="Right" Text="Full" Foreground="#8A93A6" FontSize="12"/>
+            <TextBlock x:Name="EffectsLow" Text="Flippers, ball, bumpers" Foreground="#8A93A6" FontSize="12"/>
           </DockPanel>
           <DockPanel>
             <TextBlock x:Name="MusicValue" DockPanel.Dock="Right" FontFamily="Bahnschrift" FontWeight="SemiBold" FontSize="17" Foreground="{StaticResource Gold}"/>
             <TextBlock Text="Music and voices" FontFamily="Bahnschrift" FontWeight="SemiBold" FontSize="17"/>
           </DockPanel>
-          <Slider x:Name="Music" Minimum="0" Maximum="100" SmallChange="5" LargeChange="10" TickFrequency="5" IsSnapToTickEnabled="True" Margin="0,10,0,2"/>
+          <!-- Above 100% the ticks are PinMAME's whole-dB boost steps (+1 ... +6 dB). -->
+          <Slider x:Name="Music" Minimum="0" Maximum="200" SmallChange="10" LargeChange="10" IsSnapToTickEnabled="True" Margin="0,10,0,2"
+                  Ticks="0,10,20,30,40,50,60,70,80,90,100,112,126,141,158,178,200"/>
           <DockPanel Margin="0,0,0,20">
-            <TextBlock DockPanel.Dock="Right" Text="Full (the most PinMAME gives without crackling)" Foreground="#8A93A6" FontSize="12"/>
-            <TextBlock Text="The machine's own sound" Foreground="#8A93A6" FontSize="12"/>
+            <TextBlock DockPanel.Dock="Right" Text="Over 100% is a boost and may crackle" Foreground="#8A93A6" FontSize="12"/>
+            <TextBlock Text="The machine's own sound (100% = normal)" Foreground="#8A93A6" FontSize="12"/>
           </DockPanel>
           <TextBlock x:Name="SettingsNote" Foreground="#8A93A6" FontSize="13" TextWrapping="Wrap" LineHeight="19"/>
           <DockPanel Margin="0,24,0,0">
@@ -278,7 +280,7 @@ $ui = @{}
 foreach ($n in 'Games', 'PlayBtn', 'Steps', 'DFill', 'DInitials', 'DImage', 'DTitle', 'DSub', 'DBlurb', 'ScoreBox', 'DChamp', 'DBest', 'DBestInfo', 'Summary', 'Status', 'Keys', 'ImportBtn', 'FolderBtn', 'CloseBtn',
            'AddBtn', 'RemoveBtn', 'Search', 'SearchBox', 'SearchInfo', 'SearchAdd', 'SearchClose', 'Results',
            'SettingsBtn', 'Settings', 'SettingsClose', 'Bright', 'BrightValue', 'Tilt', 'TiltValue', 'SettingsNote', 'SettingsSave', 'SettingsReset',
-           'Effects', 'EffectsValue', 'Music', 'MusicValue') {
+           'Effects', 'EffectsValue', 'EffectsLow', 'EffectsHigh', 'Music', 'MusicValue') {
     $ui[$n] = $win.FindName($n)
 }
 
@@ -565,6 +567,15 @@ function Remove-Selected {
 # VPX and PinMAME read them when a table starts.
 $script:Inv = [Globalization.CultureInfo]::InvariantCulture
 
+# VPX 10.8.0 plays table sounds at full volume for any SoundVolume above 0
+# (github.com/vpinball/vpinball/issues/1903, fixed in 10.8.1), so there the slider is On/Off.
+$script:EffectsOnOff = try { (Get-Item $VPX).VersionInfo.ProductVersion -like '10.8.0*' } catch { $false }
+if ($EffectsOnOff) {
+    $ui.Effects.TickFrequency = 100; $ui.Effects.SmallChange = 100; $ui.Effects.LargeChange = 100
+    $ui.EffectsLow.Text = 'Off    (Visual Pinball 10.8.0 can only switch these on or off)'
+    $ui.EffectsHigh.Text = 'On'
+}
+
 function Open-Settings {
     if ($script:Running) { return }
     $b = Get-IniValue $VpxIni 'Player' 'EmissionScale'
@@ -572,8 +583,11 @@ function Open-Settings {
     $ui.Bright.Value = if ($b) { [double]::Parse($b, $Inv) } else { 0.8 }
     $ui.Tilt.Value = if ($t) { [double]::Parse($t, $Inv) } else { 25 }
     $v = Get-IniValue $VpxIni 'Player' 'SoundVolume'
-    $ui.Effects.Value = if ($v) { [double]::Parse($v, $Inv) } else { 100 }   # blank = VPX's default, full
-    $ui.Music.Value = Get-MusicVolume
+    $fx = if ($v) { ConvertFrom-VpxVolume ([double]::Parse($v, $Inv)) } else { 100 }   # blank = VPX's default, full
+    # Snap to the sliders' steps (a value set elsewhere, e.g. raw 5 = 22%, would show oddly).
+    $ui.Effects.Value = if ($EffectsOnOff) { if ($fx -gt 0) { 100 } else { 0 } } else { [Math]::Round($fx / 10) * 10 }
+    $m = Get-MusicVolume
+    $ui.Music.Value = $ui.Music.Ticks | Sort-Object { [Math]::Abs($_ - $m) } | Select-Object -First 1
     # A table's own .ini (F12 menu, or the No Good Gofers brightness fix) wins over these.
     $own = @(foreach ($ini in Get-ChildItem $TablesDir -Filter *.ini) {
         $what = @()
@@ -583,6 +597,7 @@ function Open-Settings {
         if ($what) { $name + ' (' + ($what -join ', ') + ')' }
     })
     $note = 'Used by every table, starting with the next one you play.'
+    if ($EffectsOnOff) { $note += ' To hear music and voices over the flippers and ball, turn music above 100% and your PC volume down.' }
     if ($own) { $note += " These tables have their own setting, which wins: $($own -join ', ')." }
     $ui.SettingsNote.Text = $note
     $ui.Settings.Visibility = 'Visible'
@@ -599,21 +614,29 @@ function Save-Settings {
     $t = $ui.Tilt.Value.ToString('0', $Inv)
     $fx = [int]$ui.Effects.Value; $music = [int]$ui.Music.Value
     try {
-        Set-IniValues $VpxIni 'Player' @{ OverrideTableEmissionScale = 1; EmissionScale = $b; SoundVolume = $fx }
+        Set-IniValues $VpxIni 'Player' @{ OverrideTableEmissionScale = 1; EmissionScale = $b; SoundVolume = (ConvertTo-VpxVolume $fx) }
         Set-IniValues $VpxIni 'TableOverride' @{ ViewDTLookAt = $t; ViewFSSLookAt = $t }
         Set-MusicVolume $music
     } catch { $ui.SettingsNote.Text = "Couldn't save: $($_.Exception.Message)"; return }
     Close-Settings
-    $ui.Status.Text = "Saved: brightness $b, tilt $t$([char]0xB0), effects $fx%, music $music%. Used from the next table you start."
+    $ui.Status.Text = "Saved: brightness $b, tilt $t$([char]0xB0), effects $($ui.EffectsValue.Text.ToLower()), music $music%. Used from the next table you start."
 }
 
 # --- Wiring ---------------------------------------------------------------------
 $ui.SettingsBtn.Add_Click({ Open-Settings })
 $ui.SettingsClose.Add_Click({ Close-Settings })
 $ui.SettingsSave.Add_Click({ Save-Settings })
-$ui.SettingsReset.Add_Click({ $ui.Bright.Value = 0.8; $ui.Tilt.Value = 25; $ui.Effects.Value = 50; $ui.Music.Value = 100 })
-$ui.Effects.Add_ValueChanged({ $ui.EffectsValue.Text = "$([int]$ui.Effects.Value)%" })
-$ui.Music.Add_ValueChanged({ $ui.MusicValue.Text = "$([int]$ui.Music.Value)%" })
+$ui.SettingsReset.Add_Click({
+    $ui.Bright.Value = 0.8; $ui.Tilt.Value = 25; $ui.Music.Value = 100
+    $ui.Effects.Value = if ($EffectsOnOff) { 100 } else { 50 }
+})
+$ui.Effects.Add_ValueChanged({
+    $ui.EffectsValue.Text = if ($ui.Effects.Value -eq 0) { 'Off' } elseif ($EffectsOnOff) { 'On' } else { "$([int]$ui.Effects.Value)%" }
+})
+$ui.Music.Add_ValueChanged({
+    $p = [int]$ui.Music.Value
+    $ui.MusicValue.Text = if ($p -gt 100) { "$p%  boost" } else { "$p%" }
+})
 $ui.Bright.Add_ValueChanged({ $ui.BrightValue.Text = $ui.Bright.Value.ToString('0.00') })
 $ui.Tilt.Add_ValueChanged({ $ui.TiltValue.Text = "$($ui.Tilt.Value.ToString('0'))$([char]0xB0)" })
 $ui.AddBtn.Add_Click({ Open-Search })

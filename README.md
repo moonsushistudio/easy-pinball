@@ -124,11 +124,20 @@ The **Settings** button sets brightness (room light, Night to Daylight), camera 
 (0 = straight down), sound effects volume (flippers, ball, bumpers) and music and voices
 volume for every table, from the next table you start.
 
-Music and voices is PinMAME's volume for every ROM (100% is its maximum; above that it
-crackles) plus VPX's music volume for tables without a ROM. If voices get lost, turn
-effects down rather than music up. A table with its own setting keeps it (anything you
-change with F12 during play is saved for that table); the Settings screen lists those
-tables.
+Music and voices is PinMAME's volume for every ROM plus VPX's music volume for tables
+without a ROM, on a hearing scale (50% is half as loud). 100% is PinMAME's normal
+maximum; up to 200% (+6 dB) is a boost, which PinMAME warns may crackle on the loudest
+moments. Back it off if you hear that.
+
+Sound effects: Visual Pinball 10.8.0 (the installed version) plays flippers, ball and
+bumpers at full volume for any setting above 0
+([vpinball#1903](https://github.com/vpinball/vpinball/issues/1903), fixed in 10.8.1), so on
+10.8.0 this is an Off / On switch. To hear music and voices over the effects, turn music
+above 100% and your PC volume down. On a newer Visual Pinball it becomes a slider again,
+down to 10% (VPX's quietest, 20 dB down) and Off.
+
+A table with its own setting keeps it (anything you change with F12 during play is saved
+for that table); the Settings screen lists those tables.
 
 ## What Apply-Settings changes
 
@@ -141,7 +150,7 @@ values (such as those saved from the Settings screen) unless you pass them.
 | `-Inclination` | Camera tilt in degrees, default 25 (0 is straight down) |
 | `-FOV` | Field of view, default 40 |
 | `-DayNight` | Room light for every table, default 0.8 |
-| `-EffectsVolume` | Table sound effects in percent, default 50, so the music and speech aren't drowned out |
+| `-EffectsVolume` | Table sound effects in percent on the same hearing scale as the Settings slider, default 50 (half as loud). On VPX 10.8.0 anything above 0 plays at full volume |
 | `-Backglass Auto\|Beside\|Second` | Default Auto: the backglass fills the second screen if there is one, otherwise it sits beside the table |
 
 What it touches:
