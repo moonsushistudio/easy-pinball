@@ -1,0 +1,17 @@
+# Made on each PC; never shared.
+backup/
+media/
+scores.json
+*.lnk
+
+# Downloaded or built by the launcher.
+launcher/vpsdb.json
+launcher/vpsdb.json.download
+launcher/imported.json
+launcher/scan-cache.json
+
+# Game files are copyrighted and must not be committed.
+*.vpx
+*.directb2s
+*.zip
+*.nv
